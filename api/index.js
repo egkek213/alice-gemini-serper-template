@@ -318,7 +318,7 @@ export default async function handler(req, res) {
   const geoCity = body?.request?.nlu?.entities
     ?.find(entity => entity?.type === "YANDEX.GEO")
     ?.value?.city;
-  const hasLocationPhrase = /(?:^|\\s)в\\s+[А-ЯЁа-яё-]+/i.test(text);
+  const hasLocationPhrase = /(?:^|\s)в\s+[А-ЯЁа-яё-]+/i.test(text);
 
   // Never guess a city for a generic weather request. A short follow-up such as
   // "а в екб" will inherit the previous "погода" topic in buildSearchQuery.
