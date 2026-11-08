@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = "openai/gpt-oss-20b";
+const DEFAULT_MODEL = "qwen/qwen3.8-27b";
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_MESSAGE_CHARS = 1200;
 const MAX_ALICE_TEXT = 1024;
@@ -294,7 +294,7 @@ async function askGroq(text, history, searchContext, searchWasAttempted, timeout
         temperature: 0.2,
         max_completion_tokens: 320,
         reasoning_effort: "low",
-        include_reasoning: false,
+        reasoning_format: "hidden",
         stream: false
       })
     },
