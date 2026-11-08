@@ -77,6 +77,51 @@ function normalizeSearchIdentifiers(query) {
   );
 }
 
+function isTimeQuestion(text) {
+  return /(?:сколько\s+(?:сейчас\s+)?времени?|который\s+час|текущее\s+время|время\s+сейчас)/i.test(String(text || ""));
+}
+
+function hasTimeTopic(history = []) {
+  return [...safeHistory(history)].reverse().some(item =>
+    item.role === "user" && isTimeQuestion(item.text)
+  );
+}
+
+function getCityTime(city) {
+  const normalized = String(city || "").toLowerCase().trim().replace(/[ё]/g, "е");
+  const zones = {
+    "екатеринбург": "Asia/Yekaterinburg",
+    "екб": "Asia/Yekaterinburg",
+    "москва": "Europe/Moscow",
+    "санкт-петербург": "Europe/Moscow",
+    "питер": "Europe/Moscow",
+    "казань": "Europe/Moscow",
+    "нижний новгород": "Europe/Moscow",
+    "самара": "Europe/Samara",
+    "уфа": "Asia/Yekaterinburg",
+    "челябинск": "Asia/Yekaterinburg",
+    "пермь": "Asia/Yekaterinburg",
+    "тюмень": "Asia/Yekaterinburg",
+    "омск": "Asia/Omsk",
+    "новосибирск": "Asia/Novosibirsk",
+    "красноярск": "Asia/Krasnoyarsk",
+    "иркутск": "Asia/Irkutsk",
+    "якутск": "Asia/Yakutsk",
+    "владивосток": "Asia/Vladivostok",
+    "хабаровск": "Asia/Vladivostok",
+    "калининград": "Europe/Kaliningrad"
+  };
+  const timeZone = zones[normalized];
+  if (!timeZone) return null;
+  const formatted = new Intl.DateTimeFormat("ru-RU", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date());
+  return { timeZone, formatted };
+}
+
 function wasAskedForCity(history = []) {
   const lastAssistant = [...safeHistory(history)].reverse().find(item => item.role === "assistant");
   return Boolean(lastAssistant && /для какого города|в каком городе/i.test(lastAssistant.text));
@@ -314,10 +359,40 @@ export default async function handler(req, res) {
     ));
   }
 
-  const isWeatherRequest = /погод[ауыое]?/i.test(text);
   const geoCity = body?.request?.nlu?.entities
     ?.find(entity => entity?.type === "YANDEX.GEO")
     ?.value?.city;
+
+  const timeFollowUp = hasTimeTopic(oldHistory) && (geoCity || /(?:^|\\s)(?:в|на)\\s+/i.test(text));
+  if (isTimeQuestion(text) || timeFollowUp) {
+    const city = geoCity || (text.match(/(?:^|\\s)(?:в|на)\\s+([А-ЯЁа-яё-]+)/i)?.[1]);
+    if (!city) {
+      const history = [
+        ...oldHistory,
+        { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+        { role: "assistant", text: "Для какого города назвать время?" }
+      ].slice(-MAX_HISTORY_MESSAGES);
+      return res.status(200).json(aliceResponse("Для какого города назвать время?", false, history));
+    }
+    const result = getCityTime(city);
+    if (!result) {
+      const history = [
+        ...oldHistory,
+        { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+        { role: "assistant", text: "Не удалось определить часовой пояс этого города." }
+      ].slice(-MAX_HISTORY_MESSAGES);
+      return res.status(200).json(aliceResponse("Пока не знаю часовой пояс этого города.", false, history));
+    }
+    const answer = "В городе " + city + " сейчас " + result.formatted + ".";
+    const history = [
+      ...oldHistory,
+      { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+      { role: "assistant", text: answer }
+    ].slice(-MAX_HISTORY_MESSAGES);
+    return res.status(200).json(aliceResponse(answer, false, history));
+  }
+
+  const isWeatherRequest = /погод[ауыое]?/i.test(text);
   const hasLocationPhrase = /(?:^|\s)в\s+[А-ЯЁа-яё-]+/i.test(text);
 
   // Never guess a city for a generic weather request. A short follow-up such as
