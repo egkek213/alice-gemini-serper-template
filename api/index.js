@@ -101,9 +101,22 @@ function buildSearchQuery(text, history = []) {
 }
 
 function isSearchIntent(text, history = []) {
-  if (/^(?:какая сегодня дата|какое сегодня число|сегодняшняя дата)\??$/i.test(String(text || "").trim())) return false;
-  const query = buildSearchQuery(text, history);
-  return /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]/i.test(query)
+  const current = String(text || "").trim();
+  if (!current) return false;
+
+  // Simple conversation and explicitly creative tasks do not need web search.
+  if (/^(?:привет|здравствуй|здарова|доброе утро|добрый день|добрый вечер|спасибо|благодарю|пока|до свидания|как дела|ты как)\b[!.? ]*$/i.test(current)) return false;
+  if (/^(?:придумай|сочини|напиши|расскажи)\s+(?:мне\s+)?(?:сказк|стих|истори|шутк|анекдот|песн)/i.test(current)) return false;
+  if (/^(?:переведи|перефразируй|исправь грамматику|сократи|суммируй)\b/i.test(current)) return false;
+  if (/^(?:сколько будет|чему равно)\s+[\d\s()+*/.,-]+\??$/i.test(current)) return false;
+
+  const query = buildSearchQuery(current, history);
+  const freshnessOrKnownTopic = /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]|характеристик|биограф|истори[яи]|состав|производител|стоимость|цена|населени|столица|площадь|расстояни|закон|правил[ао]|событи/i.test(query);
+  const factualQuestion = /^(?:а\s+)?(?:кто|что|где|когда|почему|зачем|какой|какая|какое|какие|сколько|чей|чья|чьё|чьи|откуда|куда|кем|чем|как)\b/i.test(current)
+    || /\?\s*$/.test(current)
+    || /^(?:расскажи|объясни|что известно|информация|характеристики|сведения)\s+(?:мне\s+)?(?:о|об|про|как|почему|кто|что)\b/i.test(current);
+
+  return freshnessOrKnownTopic || factualQuestion
     || /\b20\d{2}\b/.test(query) && new RegExp(MONTHS, "i").test(query);
 }
 
