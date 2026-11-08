@@ -14,6 +14,7 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Какая погода сегодня?"), true);
   assert.equal(isSearchIntent("What is the latest news?"), true);
   assert.equal(isSearchIntent("Расскажи сказку"), false);
+  assert.equal(isSearchIntent("какая сегодня дата"), false);
   assert.equal(isSearchIntent("Список фильмов Marvel за август 2026"), true);
 });
 
