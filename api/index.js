@@ -162,9 +162,9 @@ function assessSource(url, query) {
     entry.keys.some(key => entityKeys.includes(key))
       && entry.domains.some(domain => isDomainOrSubdomain(host, domain))
   );
-  const hostCompact = host.replace(/[^a-z0-9]/g, "");
+  const siteRoot = getSiteKey(host).split(".")[0];
   const domainMatchesEntity = entityKeys.some(key =>
-    key.length >= 4 && hostCompact.includes(key.replace(/[^a-z0-9]/g, ""))
+    key.length >= 4 && siteRoot === key.replace(/[^a-z0-9]/g, "")
   );
 
   if (aliasMatch || domainMatchesEntity) {
