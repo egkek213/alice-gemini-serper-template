@@ -108,13 +108,13 @@ function isSearchIntent(text, history = []) {
   if (/^(?:какая сегодня дата|какое сегодня число|сегодняшняя дата)\??$/i.test(current)) return false;
 
   // Ordinary conversation and non-factual tasks do not need search.
-  // Do not use \\b after Russian words: JavaScript word boundaries are ASCII-oriented.
+  // Do not use \b after Russian words: JavaScript word boundaries are ASCII-oriented.
   if (/^(?:привет|здравствуй|здарова|доброе утро|добрый день|добрый вечер|спасибо|благодарю|пока|до свидания|как дела|ты как)(?=$|[!.? ]+$)/i.test(current)) return false;
-  if (/^(?:мне скучно|я устал|я устала|я рад|я рада|я не понимаю|мне нравится|я думаю|просто болтаю)(?=$|[!.? ]|\\s)/i.test(current)) return false;
-  if (/^(?:придумай|сочини|напиши|расскажи)\\s+(?:мне\\s+)?(?:сказк|стих|истори|шутк|анекдот|песн)/i.test(current)) return false;
-  if (/^(?:переведи|перефразируй|исправь грамматику|сократи|суммируй)\\s/i.test(current)) return false;
-  if (/^(?:сколько будет|чему равно)\\s+[\\d\\s()+*/.,-]+\\??$/i.test(current)) return false;
-  if (/^сколько будет\\s+\\d+\\s+(?:умножить|плюс|минус|разделить)\\s+на?\\s+\\d+\\??$/i.test(current)) return false;
+  if (/^(?:мне скучно|я устал|я устала|я рад|я рада|я не понимаю|мне нравится|я думаю|просто болтаю)(?=$|[!.? ]|\s)/i.test(current)) return false;
+  if (/^(?:придумай|сочини|напиши|расскажи)\s+(?:мне\s+)?(?:сказк|стих|истори|шутк|анекдот|песн)/i.test(current)) return false;
+  if (/^(?:переведи|перефразируй|исправь грамматику|сократи|суммируй)\s/i.test(current)) return false;
+  if (/^(?:сколько будет|чему равно)\s+[\d\s()+*/.,-]+\??$/i.test(current)) return false;
+  if (/^сколько будет\s+\d+\s+(?:умножить|плюс|минус|разделить)\s+на?\s+\d+\??$/i.test(current)) return false;
 
   // Default to web verification for every other substantive request so unfamiliar
   // topics and declarative fact requests are not silently answered from model memory.
