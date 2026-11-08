@@ -3,8 +3,8 @@ const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_MESSAGE_CHARS = 1200;
 const MAX_ALICE_TEXT = 1024;
 const TOTAL_RESPONSE_BUDGET_MS = 4300;
-const SERPER_TIMEOUT_MS = 1400;
-const GROQ_TIMEOUT_MS = 2500;
+const SERPER_TIMEOUT_MS = 1800;
+const GROQ_TIMEOUT_MS = 2000;
 
 const SYSTEM_PROMPT = [
   "Ты — полезный голосовой помощник в навыке Яндекс Алисы.",
@@ -261,7 +261,8 @@ async function fetchJson(url, options, timeoutMs) {
 
 async function searchWeb(query, timeoutMs) {
   const key = process.env.SERPER_API_KEY;
-  if (!key || timeoutMs < 150) return "";
+  if (!key) return { context: "", status: "missing_key" };
+  if (timeoutMs < 150) return { context: "", status: "budget_exhausted" };
 
   try {
     const { response, data } = await fetchJson(
@@ -279,7 +280,7 @@ async function searchWeb(query, timeoutMs) {
 
     if (!response.ok) {
       console.warn("Serper request failed with HTTP", response.status);
-      return "";
+      return { context: "", status: "http_error" };
     }
 
     const seenDomains = new Set();
@@ -288,7 +289,7 @@ async function searchWeb(query, timeoutMs) {
       const link = String(item.link || "").slice(0, 240);
       let domain = "";
       try {
-        domain = new URL(link).hostname.toLowerCase().replace(/^www\\./, "");
+        domain = new URL(link).hostname.toLowerCase().replace(/^www\./, "");
       } catch {
         continue;
       }
@@ -301,13 +302,13 @@ async function searchWeb(query, timeoutMs) {
     }
 
     // Require at least two distinct source domains before treating search as evidence.
-    if (items.length < 2) return "";
+    if (items.length < 2) return { context: "", status: "insufficient_results" };
     const answerBox = data.answerBox?.answer || data.answerBox?.snippet;
     if (answerBox) items.unshift("Сводка поисковика (только дополнительная подсказка, не самостоятельное подтверждение): " + String(answerBox).slice(0, 350));
-    return items.join("\n");
+    return { context: items.join("\n"), status: "ok" };
   } catch (error) {
-    console.warn("Serper request did not finish in time; continuing without search.");
-    return "";
+    console.warn("Serper request failed or timed out:", error?.name || "network_error");
+    return { context: "", status: error?.name === "AbortError" ? "timeout" : "network_error" };
   }
 }
 
@@ -522,14 +523,20 @@ export default async function handler(req, res) {
     const searchQuery = buildSearchQuery(text, oldHistory, geoCity);
     let searchContext = "";
     if (shouldSearch) {
-      searchContext = await searchWeb(searchQuery, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2900)));
+      const searchResult = await searchWeb(searchQuery, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2300)));
+      searchContext = searchResult.context;
       if (!searchContext) {
         const history = [
           ...oldHistory,
           { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
           { role: "assistant", text: "Не удалось проверить информацию." }
         ].slice(-MAX_HISTORY_MESSAGES);
-        return res.status(200).json(aliceResponse("Не удалось проверить информацию: поиск не вернул результаты вовремя.", false, history, conversationStart));
+        const searchFailureText = searchResult.status === "timeout"
+          ? "Поиск не успел завершиться. Попробуй ещё раз."
+          : searchResult.status === "insufficient_results"
+            ? "Не нашлось достаточно надёжных источников, чтобы подтвердить ответ."
+            : "Сейчас не удалось выполнить веб-поиск. Попробуй ещё раз позже.";
+        return res.status(200).json(aliceResponse(searchFailureText, false, history, conversationStart));
       }
     }
 
