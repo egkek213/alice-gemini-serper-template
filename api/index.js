@@ -2,8 +2,8 @@ const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_MESSAGE_CHARS = 1200;
 const MAX_ALICE_TEXT = 1024;
-const TOTAL_RESPONSE_BUDGET_MS = 3800;
-const SERPER_TIMEOUT_MS = 900;
+const TOTAL_RESPONSE_BUDGET_MS = 4300;
+const SERPER_TIMEOUT_MS = 1400;
 const GROQ_TIMEOUT_MS = 2500;
 
 const SYSTEM_PROMPT = [
@@ -289,6 +289,14 @@ export default async function handler(req, res) {
     let searchContext = "";
     if (shouldSearch) {
       searchContext = await searchWeb(searchQuery, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2900)));
+      if (!searchContext) {
+        const history = [
+          ...oldHistory,
+          { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+          { role: "assistant", text: "Не удалось проверить информацию." }
+        ].slice(-MAX_HISTORY_MESSAGES);
+        return res.status(200).json(aliceResponse("Не удалось проверить информацию: поиск не вернул результаты вовремя.", false, history));
+      }
     }
 
     const answer = await askGroq(
