@@ -79,7 +79,7 @@ function normalizeSearchIdentifiers(query) {
 function buildSearchQuery(text, history = []) {
   const current = String(text || "").trim();
   const priorUser = [...safeHistory(history)].reverse()
-    .find(item => item.role === "user" && item.text.trim().length >= 12 && !isFollowUp(item.text));
+    .find(item => item.role === "user" && item.text.trim().length >= 3 && !isFollowUp(item.text));
   if (!isFollowUp(current) || !priorUser) return normalizeSearchIdentifiers(current);
 
   const prior = priorUser.text;
@@ -300,6 +300,23 @@ export default async function handler(req, res) {
       false,
       oldHistory
     ));
+  }
+
+  const isWeatherRequest = /погод[ауыое]?/i.test(text);
+  const geoCity = body?.request?.nlu?.entities
+    ?.find(entity => entity?.type === "YANDEX.GEO")
+    ?.value?.city;
+  const hasLocationPhrase = /(?:^|\\s)в\\s+[А-ЯЁа-яё-]+/i.test(text);
+
+  // Never guess a city for a generic weather request. A short follow-up such as
+  // "а в екб" will inherit the previous "погода" topic in buildSearchQuery.
+  if (isWeatherRequest && !geoCity && !hasLocationPhrase) {
+    const history = [
+      ...oldHistory,
+      { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+      { role: "assistant", text: "Для какого города посмотреть погоду?" }
+    ].slice(-MAX_HISTORY_MESSAGES);
+    return res.status(200).json(aliceResponse("Для какого города посмотреть погоду?", false, history));
   }
 
   try {
