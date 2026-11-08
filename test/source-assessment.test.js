@@ -24,6 +24,17 @@ test("marks unrelated GitHub ownership as unverified", () => {
   assert.equal(result.kind, "github_unverified");
 });
 
+test("does not mistake a third-party site containing the brand name for an official domain", () => {
+  assert.equal(
+    assessSource("https://www.windowscentral.com/news", "Windows 13 release date").kind,
+    "independent_or_unverified"
+  );
+  assert.equal(
+    assessSource("https://raspberrypi.stackexchange.com/questions/1", "Raspberry Pi 5 SDK").kind,
+    "independent_or_unverified"
+  );
+});
+
 test("does not promote an unrelated forum to an official source", () => {
   const result = assessSource("https://forum.example.net/thread/123", "JieLi AC7076A SDK");
   assert.equal(result.kind, "independent_or_unverified");
