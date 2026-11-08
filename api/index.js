@@ -2,8 +2,8 @@ const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_MESSAGE_CHARS = 1200;
 const MAX_ALICE_TEXT = 1024;
-const TOTAL_RESPONSE_BUDGET_MS = 4300;
-const SERPER_TIMEOUT_MS = 1000;
+const TOTAL_RESPONSE_BUDGET_MS = 3800;
+const SERPER_TIMEOUT_MS = 900;
 const GROQ_TIMEOUT_MS = 2500;
 
 const SYSTEM_PROMPT = [
@@ -31,8 +31,8 @@ function aliceResponse(text, endSession = false, history = []) {
 
 function fitAliceText(value) {
   const text = String(value ?? "")
-    .replace(/[\\r\\n\\t]+/g, " ")
-    .replace(/\\s{2,}/g, " ")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
     .trim();
 
   if (text.length <= MAX_ALICE_TEXT) return text || "Не удалось подготовить ответ.";
@@ -61,7 +61,7 @@ function safeHistory(history) {
 }
 
 function isFollowUp(text) {
-  return /^(а\\s+)?(в|за|на|а\\s+что|а\\s+как|а\\s+если|а\\s+когда)\\b/i.test(text.trim());
+  return /^(а\s+)?(в|за|на|а\s+что|а\s+как|а\s+если|а\s+когда)\b/i.test(text.trim());
 }
 
 function buildSearchQuery(text, history = []) {
@@ -72,16 +72,36 @@ function buildSearchQuery(text, history = []) {
 
   const prior = priorUser.text;
   const monthMatch = current.match(new RegExp(MONTHS, "i"));
-  if (monthMatch && new RegExp(MONTHS, "i").test(prior)) {
-    return prior.replace(new RegExp(MONTHS, "i"), monthMatch[0]) + " " + (current.match(/\\b20\\d{2}\\b/)?.[0] || "");
+  const priorHasMonth = new RegExp(MONTHS, "i").test(prior);
+  if (monthMatch && priorHasMonth) {
+    const month = monthMatch[0].toLowerCase();
+    const monthName = month.startsWith("январ") ? "январь"
+      : month.startsWith("феврал") ? "февраль"
+      : month.startsWith("март") ? "март"
+      : month.startsWith("апрел") ? "апрель"
+      : month.startsWith("ма") ? "май"
+      : month.startsWith("июн") ? "июнь"
+      : month.startsWith("июл") ? "июль"
+      : month.startsWith("август") ? "август"
+      : month.startsWith("сентябр") ? "сентябрь"
+      : month.startsWith("октябр") ? "октябрь"
+      : month.startsWith("ноябр") ? "ноябрь"
+      : "декабрь";
+    const year = current.match(/\b20\d{2}\b/)?.[0] || prior.match(/\b20\d{2}\b/)?.[0] || "";
+    const topic = prior
+      .replace(new RegExp(MONTHS, "i"), "")
+      .replace(/\b20\d{2}\b/g, "")
+      .replace(/\b(за|в|на)\s*$/i, "")
+      .trim();
+    return [topic, monthName, year].filter(Boolean).join(" ");
   }
   return prior + " " + current;
 }
 
 function isSearchIntent(text, history = []) {
   const query = buildSearchQuery(text, history);
-  return /\\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]/i.test(query)
-    || /\\b20\\d{2}\\b/.test(query) && new RegExp(MONTHS, "i").test(query);
+  return /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]/i.test(query)
+    || /\b20\d{2}\b/.test(query) && new RegExp(MONTHS, "i").test(query);
 }
 
 async function fetchJson(url, options, timeoutMs) {
@@ -130,7 +150,7 @@ async function searchWeb(query, timeoutMs) {
 
     const answerBox = data.answerBox?.answer || data.answerBox?.snippet;
     if (answerBox) items.unshift("Краткий ответ поисковика: " + String(answerBox).slice(0, 350));
-    return items.length ? items.join("\\n") : "";
+    return items.length ? items.join("\n") : "";
   } catch (error) {
     console.warn("Serper request did not finish in time; continuing without search.");
     return "";
@@ -155,10 +175,10 @@ async function askGroq(text, history, searchContext, searchWasAttempted, timeout
 
   let prompt = text;
   if (searchContext) {
-    prompt += "\\n\\nРезультаты веб-поиска по теме запроса (источник может содержать ошибки, сверяй формулировки и даты):\\n" + searchContext
-      + "\\nОтвечай только фактами, которые подтверждаются этими результатами. Если подтверждения нет, скажи об этом.";
+    prompt += "\n\nРезультаты веб-поиска по теме запроса (источник может содержать ошибки, сверяй формулировки и даты):\n" + searchContext
+      + "\nОтвечай только фактами, которые подтверждаются этими результатами. Если подтверждения нет, скажи об этом.";
   } else if (searchWasAttempted) {
-    prompt += "\\n\\nВеб-поиск не вернул проверяемых результатов. Не отвечай на фактическую часть по памяти и не придумывай названия или даты. Скажи, что сейчас не удалось проверить информацию.";
+    prompt += "\n\nВеб-поиск не вернул проверяемых результатов. Не отвечай на фактическую часть по памяти и не придумывай названия или даты. Скажи, что сейчас не удалось проверить информацию.";
   }
   messages.push({ role: "user", content: prompt });
 
