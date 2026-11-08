@@ -15,7 +15,11 @@ const SYSTEM_PROMPT = [
   "Короткие реакции и уточнения вроде «как так», «почему так», «в смысле», «что значит», «ужас-то какой», «кошмар», «жесть», а также пояснения «я говорю…», «я имею в виду…», «я про…» обычно относятся к предыдущему ответу. Учитывай историю диалога, отвечай естественно и при необходимости признай, что неверно понял реплику. Не превращай эмоциональную реакцию в вопрос об орфографии и не запускай для неё веб-поиск.",
   "Для любых вопросов и просьб о сведениях из реального мира опирайся на веб-поиск, а не на память модели. Поиск запускается для всех содержательных запросов, кроме приветствий, обычной беседы, творческих задач, преобразования уже данного текста и простой арифметики.",
   "Результаты поиска имеют приоритет над историей и твоими знаниями. История диалога — только контекст; предыдущие ответы ассистента никогда не являются доказательством.",
-  "Проверяй ключевые имена, даты, числа, характеристики и причинно-следственные утверждения по нескольким независимым результатам. По возможности отдавай приоритет официальным документам, сайтам производителей, научным публикациям и профильным источникам. Не считай несколько страниц одного сайта независимыми подтверждениями.",
+  "Проверяй ключевые имена, даты, числа, характеристики и причинно-следственные утверждения по нескольким независимым результатам. Оценивай не только текст, но и происхождение каждого источника.",
+  "Приоритет источников: сначала официальный сайт производителя или его документация; затем репозиторий организации-разработчика, если связь организации с продуктом действительно подтверждается; затем профильная техническая документация и научные публикации; затем независимые профильные статьи; форумы и агрегаторы используй только как подсказки, а не как официальное подтверждение.",
+  "GitHub сам по себе не делает репозиторий официальным. Проверяй владельца репозитория и его связь с производителем. Домен, похожий на название бренда, тоже не доказывает официальный статус автоматически.",
+  "Поисковая позиция не равна надёжности. Несколько страниц одного сайта или одного владельца не являются независимыми подтверждениями. Если доступен только поисковый сниппет, не делай вид, что прочитал полную документацию.",
+  "Строго различай формулировки: «официально не объявлено» можно говорить только при наличии надёжного официального подтверждения; если поиск просто ничего не нашёл, говори «не удалось найти подтверждение» или «по найденным источникам проверить не удалось». Отсутствие результата поиска не доказывает отсутствие продукта, SDK или события.",
   "Если источники противоречат друг другу, явно обозначь неопределённость. Не выбирай уверенно один вариант без основания и не добавляй детали, которых нет в результатах.",
   "Если результатов недостаточно для надёжного подтверждения, прямо скажи, что не удалось проверить информацию. Не заполняй пробелы догадками и не отвечай по памяти даже если тебе кажется, что ты знаешь ответ.",
   "Если не знаешь ответа, честно скажи об этом."
@@ -81,6 +85,109 @@ function normalizeSearchIdentifiers(query) {
   return String(query || "").replace(/\bAC[\s-]*7076[\s-]*A\b/gi, match =>
     match + " AC7076A"
   );
+}
+
+const BRAND_DOMAIN_ALIASES = [
+  { keys: ["windows", "windows11", "windows13"], domains: ["microsoft.com"] },
+  { keys: ["raspberry", "raspberrypi"], domains: ["raspberrypi.com", "raspberrypi.org"] },
+  { keys: ["jieli"], domains: ["jieli.com"] },
+  { keys: ["android"], domains: ["android.com", "source.android.com"] },
+  { keys: ["iphone", "ios", "macos"], domains: ["apple.com"] }
+];
+
+const SOURCE_QUERY_STOP_WORDS = new Set([
+  "есть", "ли", "для", "как", "что", "где", "когда", "почему", "официальный",
+  "официальная", "официальное", "официального", "дата", "выхода", "sdk",
+  "программирования", "на", "the", "and", "for", "with", "official", "date",
+  "release", "development", "developer"
+]);
+
+function getQueryEntityKeys(query) {
+  const tokens = String(query || "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .match(/[a-zа-я0-9]+/g) || [];
+  const useful = tokens.filter(token =>
+    token.length >= 3 && !/^\d+$/.test(token) && !SOURCE_QUERY_STOP_WORDS.has(token)
+  );
+  const keys = new Set(useful);
+  for (let index = 0; index < useful.length - 1; index += 1) {
+    keys.add(useful[index] + useful[index + 1]);
+  }
+  return [...keys];
+}
+
+function isDomainOrSubdomain(host, domain) {
+  return host === domain || host.endsWith("." + domain);
+}
+
+function getSiteKey(host) {
+  const parts = String(host || "").split(".").filter(Boolean);
+  if (parts.length <= 2) return host;
+  const multiPartSuffixes = new Set([
+    "co.uk", "org.uk", "ac.uk", "com.au", "co.nz", "com.br", "com.cn",
+    "co.jp", "com.sg", "com.tr", "com.tw", "com.hk", "com.mx", "com.ar",
+    "com.ua", "com.pl", "com.ru", "com.sa", "co.in"
+  ]);
+  const suffix = parts.slice(-2).join(".");
+  return multiPartSuffixes.has(suffix)
+    ? parts.slice(-3).join(".")
+    : parts.slice(-2).join(".");
+}
+
+function assessSource(url, query) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ""));
+  } catch {
+    return { kind: "unknown", label: "Источник с нераспознанным адресом", domain: "" };
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  const entityKeys = getQueryEntityKeys(query);
+
+  if (host === "github.com") {
+    const owner = (parsed.pathname.split("/")[1] || "").toLowerCase();
+    const ownerMatchesEntity = entityKeys.some(key => owner === key || owner.startsWith(key));
+    return {
+      kind: ownerMatchesEntity ? "github_brand_match" : "github_unverified",
+      label: ownerMatchesEntity
+        ? "GitHub-репозиторий владельца, совпадающего с названием сущности; официальность нужно подтвердить"
+        : "GitHub-репозиторий; связь владельца с производителем не установлена",
+      domain: host
+    };
+  }
+
+  const aliasMatch = BRAND_DOMAIN_ALIASES.some(entry =>
+    entry.keys.some(key => entityKeys.includes(key))
+      && entry.domains.some(domain => isDomainOrSubdomain(host, domain))
+  );
+  const hostCompact = host.replace(/[^a-z0-9]/g, "");
+  const domainMatchesEntity = entityKeys.some(key =>
+    key.length >= 4 && hostCompact.includes(key.replace(/[^a-z0-9]/g, ""))
+  );
+
+  if (aliasMatch || domainMatchesEntity) {
+    return {
+      kind: "official_candidate",
+      label: "Домен совпадает с брендом или его известным официальным доменом; статус всё равно нужно сверить по содержимому страницы",
+      domain: host
+    };
+  }
+
+  if (/\.(?:gov|edu)$/.test(host) || /\.(?:ac\.uk|edu\.au)$/.test(host)) {
+    return {
+      kind: "institutional",
+      label: "Государственный или образовательный источник; авторитетен в своей области, но не обязательно является производителем",
+      domain: host
+    };
+  }
+
+  return {
+    kind: "independent_or_unverified",
+    label: "Независимый или пока не проверенный источник",
+    domain: host
+  };
 }
 
 function isTimeQuestion(text) {
@@ -283,25 +390,35 @@ async function searchWeb(query, timeoutMs) {
       return { context: "", status: "http_error" };
     }
 
-    const seenDomains = new Set();
+    const seenSites = new Set();
     const items = [];
     for (const item of (Array.isArray(data.organic) ? data.organic : [])) {
-      const link = String(item.link || "").slice(0, 240);
-      let domain = "";
+      const link = String(item.link || "").slice(0, 500);
+      let parsed;
       try {
-        domain = new URL(link).hostname.toLowerCase().replace(/^www\./, "");
+        parsed = new URL(link);
       } catch {
         continue;
       }
-      if (!domain || seenDomains.has(domain)) continue;
-      seenDomains.add(domain);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") continue;
+      const assessment = assessSource(link, query);
+      const siteKey = getSiteKey(assessment.domain);
+      if (!assessment.domain || seenSites.has(siteKey)) continue;
+      seenSites.add(siteKey);
       const title = String(item.title || "").slice(0, 180);
       const snippet = String(item.snippet || "").slice(0, 350);
-      items.push(items.length + 1 + ". " + title + ": " + snippet + " " + link);
+      const position = Number(item.position) || items.length + 1;
+      items.push(
+        position + ". " + "Категория источника: " + assessment.label
+        + ". Домен: " + assessment.domain
+        + ". Заголовок: " + title
+        + ". Фрагмент: " + snippet
+        + ". URL: " + link
+      );
       if (items.length >= 5) break;
     }
 
-    // Require at least two distinct source domains before treating search as evidence.
+    // Count distinct registrable sites, not merely different subdomains.
     if (items.length < 2) return { context: "", status: "insufficient_results" };
     const answerBox = data.answerBox?.answer || data.answerBox?.snippet;
     if (answerBox) items.unshift("Сводка поисковика (только дополнительная подсказка, не самостоятельное подтверждение): " + String(answerBox).slice(0, 350));
@@ -330,7 +447,7 @@ async function askGroq(text, history, searchContext, searchWasAttempted, timeout
 
   let prompt = text;
   if (searchContext) {
-    prompt += "\n\nРезультаты веб-поиска по теме запроса (источник может содержать ошибки, сверяй формулировки и даты):\n" + searchContext
+    prompt += "\n\nРезультаты веб-поиска по теме запроса. Учитывай предварительную категорию источника, но самостоятельно проверяй её по домену, владельцу и содержимому:\n" + searchContext
       + "\nОтвечай только фактами, которые подтверждаются этими результатами. Если подтверждения нет, скажи об этом.";
   } else if (searchWasAttempted) {
     prompt += "\n\nВеб-поиск не вернул проверяемых результатов. Не отвечай на фактическую часть по памяти и не придумывай названия или даты. Скажи, что сейчас не удалось проверить информацию.";
@@ -562,4 +679,4 @@ export default async function handler(req, res) {
   }
 }
 
-export { aliceResponse, buildSearchQuery, fitAliceText, isSearchIntent, safeHistory };
+export { aliceResponse, assessSource, buildSearchQuery, fitAliceText, getQueryEntityKeys, getSiteKey, isSearchIntent, safeHistory };
