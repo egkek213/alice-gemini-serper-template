@@ -61,7 +61,7 @@ function safeHistory(history) {
 }
 
 function isFollowUp(text) {
-  return /^(а\s+)?(в|за|на|а\s+что|а\s+как|а\s+если|а\s+когда)\b/i.test(text.trim());
+  return /^(?:а\s+)?(?:в|за|на|а\s+что|а\s+как|а\s+если|а\s+когда)(?:\s|$)/i.test(text.trim());
 }
 
 function buildSearchQuery(text, history = []) {
@@ -91,7 +91,7 @@ function buildSearchQuery(text, history = []) {
     const topic = prior
       .replace(new RegExp(MONTHS, "i"), "")
       .replace(/\b20\d{2}\b/g, "")
-      .replace(/\b(за|в|на)\s*$/i, "")
+      .replace(/(?:^|\s)(?:за|в|на)\s*$/i, "")
       .trim();
     return [topic, monthName, year].filter(Boolean).join(" ");
   }
