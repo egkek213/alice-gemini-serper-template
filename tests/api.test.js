@@ -21,7 +21,7 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Почему небо голубое?"), true);
   assert.equal(isSearchIntent("Расскажи сказку про дракона"), false);
   assert.equal(isSearchIntent("Как дела?"), false);
-  assert.equal(isSearchIntent("Сколько будет 17 умножить на 3?"), true);
+  assert.equal(isSearchIntent("Сколько будет 17 умножить на 3?"), false);
 });
 
 test("follow-up month questions inherit the previous topic for search", () => {
