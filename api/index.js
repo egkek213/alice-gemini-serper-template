@@ -103,6 +103,7 @@ function buildSearchQuery(text, history = []) {
 function isSearchIntent(text, history = []) {
   const current = String(text || "").trim();
   if (!current) return false;
+  if (/^(?:какая сегодня дата|какое сегодня число|сегодняшняя дата)\??$/i.test(current)) return false;
 
   // Simple conversation and explicitly creative tasks do not need web search.
   if (/^(?:привет|здравствуй|здарова|доброе утро|добрый день|добрый вечер|спасибо|благодарю|пока|до свидания|как дела|ты как)\b[!.? ]*$/i.test(current)) return false;
