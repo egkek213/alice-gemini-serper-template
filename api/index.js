@@ -101,6 +101,7 @@ function buildSearchQuery(text, history = []) {
 }
 
 function isSearchIntent(text, history = []) {
+  if (/^(?:какая сегодня дата|какое сегодня число|сегодняшняя дата)\??$/i.test(String(text || "").trim())) return false;
   const query = buildSearchQuery(text, history);
   return /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]/i.test(query)
     || /\b20\d{2}\b/.test(query) && new RegExp(MONTHS, "i").test(query);
