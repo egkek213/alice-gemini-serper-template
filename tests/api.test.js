@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aliceResponse, fitAliceText, isSearchIntent, safeHistory } from "../api/index.js";
+import { aliceResponse, buildSearchQuery, fitAliceText, isSearchIntent, safeHistory } from "../api/index.js";
 
 test("Alice response uses required response envelope", () => {
   const result = aliceResponse("Привет", false, [{ role: "user", text: "тест" }]);
@@ -14,6 +14,16 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Какая погода сегодня?"), true);
   assert.equal(isSearchIntent("What is the latest news?"), true);
   assert.equal(isSearchIntent("Расскажи сказку"), false);
+  assert.equal(isSearchIntent("Список фильмов Marvel за август 2026"), true);
+});
+
+test("follow-up month questions inherit the previous topic for search", () => {
+  const history = [
+    { role: "user", text: "список фильмов marvel за август 2026" },
+    { role: "assistant", text: "Вот список фильмов..." }
+  ];
+  assert.equal(buildSearchQuery("а в июле 2026", history), "список фильмов marvel за июль 2026");
+  assert.equal(isSearchIntent("а в июле 2026", history), true);
 });
 
 test("long responses are cut at a natural boundary and stay within Alice limit", () => {
