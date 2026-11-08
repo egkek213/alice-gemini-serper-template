@@ -23,14 +23,14 @@ const SYSTEM_PROMPT = [
 
 const MONTHS = "(январ[еь]|феврал[еь]|март[еа]?|апрел[еь]|ма[йяе]|июн[еья]|июл[еья]|август[еа]?|сентябр[еь]|октябр[еь]|ноябр[еь]|декабр[еь])";
 
-function aliceResponse(text, endSession = false, history = []) {
+function aliceResponse(text, endSession = false, history = [], conversationStart = null) {
   return {
     version: "1.0",
     response: {
       text: fitAliceText(text),
       end_session: endSession
     },
-    session_state: { history }
+    session_state: { history, conversation_start: conversationStart }
   };
 }
 
@@ -63,6 +63,10 @@ function safeHistory(history) {
       role: item.role === "user" ? "user" : "assistant",
       text: item.text.slice(0, MAX_HISTORY_MESSAGE_CHARS)
     }));
+}
+
+function isConversationStartQuestion(text) {
+  return /(?:с\s+чего\s+я\s+начал(?:ся)?\s+(?:диалог|разговор)|что\s+я\s+(?:спросил|сказал)\s+в\s+самом\s+начале|какая\s+была\s+моя\s+первая\s+реплика|мой\s+первый\s+вопрос)/i.test(String(text || "").trim());
 }
 
 function isFollowUp(text) {
@@ -372,13 +376,32 @@ export default async function handler(req, res) {
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const text = String(body?.request?.command || body?.request?.original_utterance || "").trim();
   const oldHistory = safeHistory(body?.state?.session?.history);
+  const priorConversationStart = typeof body?.state?.session?.conversation_start === "string"
+    ? body.state.session.conversation_start
+    : null;
+  const isFirstSessionMessage = body?.session?.new === true || Number(body?.session?.message_id) === 1;
+  const conversationStart = priorConversationStart
+    || (isFirstSessionMessage && text ? text.slice(0, MAX_HISTORY_MESSAGE_CHARS) : null);
 
   if (!text) {
     return res.status(200).json(aliceResponse(
       "Привет! Я могу ответить на вопрос или найти актуальную информацию. Что хочешь узнать?",
       false,
-      oldHistory
+      oldHistory,
+      conversationStart
     ));
+  }
+
+  if (isConversationStartQuestion(text)) {
+    const answer = conversationStart
+      ? "Ты начал диалог с фразы: «" + conversationStart + "»."
+      : "Не могу точно определить начало этого диалога: оно не сохранилось в переданной истории.";
+    const history = [
+      ...oldHistory,
+      { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+      { role: "assistant", text: answer }
+    ].slice(-MAX_HISTORY_MESSAGES);
+    return res.status(200).json(aliceResponse(answer, false, history, conversationStart));
   }
 
   const geoCity = body?.request?.nlu?.entities
@@ -394,7 +417,7 @@ export default async function handler(req, res) {
         { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
         { role: "assistant", text: "Для какого города назвать время?" }
       ].slice(-MAX_HISTORY_MESSAGES);
-      return res.status(200).json(aliceResponse("Для какого города назвать время?", false, history));
+      return res.status(200).json(aliceResponse("Для какого города назвать время?", false, history, conversationStart));
     }
     const result = getCityTime(city);
     if (!result) {
@@ -403,7 +426,7 @@ export default async function handler(req, res) {
         { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
         { role: "assistant", text: "Не удалось определить часовой пояс этого города." }
       ].slice(-MAX_HISTORY_MESSAGES);
-      return res.status(200).json(aliceResponse("Пока не знаю часовой пояс этого города.", false, history));
+      return res.status(200).json(aliceResponse("Пока не знаю часовой пояс этого города.", false, history, conversationStart));
     }
     const answer = "В городе " + city + " сейчас " + result.formatted + ".";
     const history = [
@@ -411,7 +434,7 @@ export default async function handler(req, res) {
       { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
       { role: "assistant", text: answer }
     ].slice(-MAX_HISTORY_MESSAGES);
-    return res.status(200).json(aliceResponse(answer, false, history));
+    return res.status(200).json(aliceResponse(answer, false, history, conversationStart));
   }
 
   const isWeatherRequest = /погод[ауыое]?/i.test(text);
@@ -425,7 +448,7 @@ export default async function handler(req, res) {
       { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
       { role: "assistant", text: "Для какого города посмотреть погоду?" }
     ].slice(-MAX_HISTORY_MESSAGES);
-    return res.status(200).json(aliceResponse("Для какого города посмотреть погоду?", false, history));
+    return res.status(200).json(aliceResponse("Для какого города посмотреть погоду?", false, history, conversationStart));
   }
 
   try {
@@ -440,7 +463,7 @@ export default async function handler(req, res) {
           { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
           { role: "assistant", text: "Не удалось проверить информацию." }
         ].slice(-MAX_HISTORY_MESSAGES);
-        return res.status(200).json(aliceResponse("Не удалось проверить информацию: поиск не вернул результаты вовремя.", false, history));
+        return res.status(200).json(aliceResponse("Не удалось проверить информацию: поиск не вернул результаты вовремя.", false, history, conversationStart));
       }
     }
 
@@ -458,11 +481,11 @@ export default async function handler(req, res) {
       { role: "assistant", text: answer.slice(0, MAX_HISTORY_MESSAGE_CHARS) }
     ].slice(-MAX_HISTORY_MESSAGES);
 
-    return res.status(200).json(aliceResponse(answer, false, history));
+    return res.status(200).json(aliceResponse(answer, false, history, conversationStart));
   } catch (error) {
     const safeError = error?.message === "AbortError" ? "TIME_BUDGET_EXHAUSTED" : error;
     console.warn("Alice webhook returned a fallback response:", safeError?.message || "unknown error");
-    return res.status(200).json(aliceResponse(errorForUser(safeError), false, oldHistory));
+    return res.status(200).json(aliceResponse(errorForUser(safeError), false, oldHistory, conversationStart));
   }
 }
 
