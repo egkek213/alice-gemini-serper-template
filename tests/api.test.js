@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aliceResponse, fitAliceText, isSearchIntent, safeHistory } from "../api/index.js";
+import { aliceResponse, buildSearchQuery, fitAliceText, isSearchIntent, safeHistory } from "../api/index.js";
 
 test("Alice response uses required response envelope", () => {
   const result = aliceResponse("Привет", false, [{ role: "user", text: "тест" }]);
@@ -14,6 +14,35 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Какая погода сегодня?"), true);
   assert.equal(isSearchIntent("What is the latest news?"), true);
   assert.equal(isSearchIntent("Расскажи сказку"), false);
+  assert.equal(isSearchIntent("какая сегодня дата"), false);
+  assert.equal(isSearchIntent("Список фильмов Marvel за август 2026"), true);
+  assert.equal(isSearchIntent("Кто придумал Bluetooth?"), true);
+  assert.equal(isSearchIntent("Какой процессор стоит в AC7076A?"), true);
+  assert.equal(isSearchIntent("Почему небо голубое?"), true);
+  assert.equal(isSearchIntent("Расскажи сказку про дракона"), false);
+  assert.equal(isSearchIntent("Как дела?"), false);
+  assert.equal(isSearchIntent("Сколько будет 17 умножить на 3?"), false);
+  assert.equal(isSearchIntent("Кто разработал Bluetooth"), true);
+  assert.equal(isSearchIntent("Расскажи про Bluetooth"), true);
+  assert.equal(isSearchIntent("Назови трёх инженеров, создавших Bluetooth"), true);
+  assert.equal(isSearchIntent("Объясни принцип работы AC7076A"), true);
+  assert.equal(isSearchIntent("Сколько весит обычный пассажирский самолёт"), true);
+  assert.equal(isSearchIntent("Я устал"), false);
+});
+
+test("search query normalizes spaced and hyphenated AC7076A identifiers", () => {
+  assert.match(buildSearchQuery("расскажи про AC 7076 A"), /AC7076A/);
+  assert.match(buildSearchQuery("расскажи про AC-7076-A"), /AC7076A/);
+  assert.match(buildSearchQuery("расскажи про AC7076A"), /AC7076A/);
+});
+
+test("follow-up month questions inherit the previous topic for search", () => {
+  const history = [
+    { role: "user", text: "список фильмов marvel за август 2026" },
+    { role: "assistant", text: "Вот список фильмов..." }
+  ];
+  assert.equal(buildSearchQuery("а в июле 2026", history), "список фильмов marvel июль 2026");
+  assert.equal(isSearchIntent("а в июле 2026", history), true);
 });
 
 test("long responses are cut at a natural boundary and stay within Alice limit", () => {
@@ -22,13 +51,14 @@ test("long responses are cut at a natural boundary and stay within Alice limit",
   assert.ok(value.endsWith("."));
 });
 
-test("history filters malformed messages and keeps last 8", () => {
+test("history normalizes legacy Gemini model roles and keeps last 8", () => {
   const input = Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? "model" : "user", text: String(i) }));
   input.push({ role: "hacker", text: "ignore" }, { role: "user", text: 17 });
   const result = safeHistory(input);
   assert.equal(result.length, 8);
   assert.equal(result[0].text, "4");
   assert.equal(result[7].text, "11");
+  assert.equal(result[1].role, "assistant");
 });
 
 test("GET health check returns an ok response", async () => {
@@ -43,7 +73,7 @@ test("GET health check returns an ok response", async () => {
   await handler({ method: "GET" }, res);
   assert.equal(statusCode, 200);
   assert.equal(payload.ok, true);
-  assert.equal(payload.service, "alice-gemini-serper");
+  assert.equal(payload.service, "alice-groq-serper");
 });
 
 test("launch request returns a valid Alice greeting without external API keys", async () => {
