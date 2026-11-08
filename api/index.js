@@ -363,9 +363,9 @@ export default async function handler(req, res) {
     ?.find(entity => entity?.type === "YANDEX.GEO")
     ?.value?.city;
 
-  const timeFollowUp = hasTimeTopic(oldHistory) && (geoCity || /(?:^|\\s)(?:в|на)\\s+/i.test(text));
+  const timeFollowUp = hasTimeTopic(oldHistory) && (geoCity || /(?:^|\s)(?:в|на)\s+/i.test(text));
   if (isTimeQuestion(text) || timeFollowUp) {
-    const city = geoCity || (text.match(/(?:^|\\s)(?:в|на)\\s+([А-ЯЁа-яё-]+)/i)?.[1]);
+    const city = geoCity || (text.match(/(?:^|\s)(?:в|на)\s+([А-ЯЁа-яё-]+)/i)?.[1]);
     if (!city) {
       const history = [
         ...oldHistory,
