@@ -114,25 +114,25 @@ function getDeterministicDateAnswer(text, history = [], timeZone = "UTC") {
   const current = String(text || "").toLowerCase().replace(/ё/g, "е").trim();
   const date = getCurrentDateParts(timeZone);
 
-  const ageMatch = current.match(/если\\s+бы\\s+ты\\s+родил(?:ся|ась)\\s+(\\d{1,3})\\s+лет?\\s+назад[\\s\\S]*?(?:сколько\\s+бы\\s+тебе\\s+сейчас\\s+было|сколько\\s+лет?\\s+тебе\\s+сейчас)/i);
+  const ageMatch = current.match(/если\s+бы\s+ты\s+родил(?:ся|ась)\s+(\d{1,3})\s+лет?\s+назад[\s\S]*?(?:сколько\s+бы\s+тебе\s+сейчас\s+было|сколько\s+лет?\s+тебе\s+сейчас)/i);
   if (ageMatch) return "Мне было бы " + Number(ageMatch[1]) + " лет.";
 
-  const yearAgoMatch = current.match(/(\\d{1,3})\\s+лет?\\s+назад/i);
+  const yearAgoMatch = current.match(/(\d{1,3})\s+лет?\s+назад/i);
   if (yearAgoMatch && /год/i.test(current)) {
     return "Это был " + (date.year - Number(yearAgoMatch[1])) + " год.";
   }
 
-  if (/^(?:а\\s+)?(?:какой\\s+)?(?:сейчас\\s+)?год(?:\\s+сейчас)?[?!., ]*$/i.test(current)
-    || /^(?:а\\s+)?сейчас\\s+какой(?:\\s+год)?[?!., ]*$/i.test(current)) {
+  if (/^(?:а\s+)?(?:какой\s+)?(?:сейчас\s+)?год(?:\s+сейчас)?[?!., ]*$/i.test(current)
+    || /^(?:а\s+)?сейчас\s+какой(?:\s+год)?[?!., ]*$/i.test(current)) {
     const previousYearQuestion = [...safeHistory(history)].reverse().find(item =>
-      item.role === "user" && /год/i.test(item.text) && /\\d+\\s+лет?\\s+назад/i.test(item.text)
+      item.role === "user" && /год/i.test(item.text) && /\d+\s+лет?\s+назад/i.test(item.text)
     );
     if (previousYearQuestion || /год/i.test(current)) return "Сейчас " + date.year + " год.";
   }
 
-  if (/^(?:а\\s+)?(?:какая\\s+)?(?:сегодня\\s+)?(?:дата|число)(?:\\s+сейчас)?[?!., ]*$/i.test(current)
-    || /^(?:а\\s+)?дата\\s+сейчас\\s+какая[?!., ]*$/i.test(current)
-    || /^(?:какая\\s+)?сегодняшняя\\s+дата[?!., ]*$/i.test(current)) {
+  if (/^(?:а\s+)?(?:какая\s+)?(?:сегодня\s+)?(?:дата|число)(?:\s+сейчас)?[?!., ]*$/i.test(current)
+    || /^(?:а\s+)?дата\s+сейчас\s+какая[?!., ]*$/i.test(current)
+    || /^(?:какая\s+)?сегодняшняя\s+дата[?!., ]*$/i.test(current)) {
     return "Сегодня " + date.day + " " + date.month + " " + date.year + " года.";
   }
 
