@@ -72,7 +72,7 @@ function normalizeSearchIdentifiers(query) {
   // Search engines may treat spaced and hyphenated chip/model numbers differently.
   // Include the canonical compact form alongside the user's original wording.
   return String(query || "").replace(/\\bAC[\\s-]*7076[\\s-]*A\\b/gi, match =>
-    match + " AC7076A \\"AC 7076 A\\""
+    match + " AC7076A"
   );
 }
 
