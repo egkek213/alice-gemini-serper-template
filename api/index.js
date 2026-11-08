@@ -77,8 +77,17 @@ function normalizeSearchIdentifiers(query) {
   );
 }
 
-function buildSearchQuery(text, history = []) {
+function wasAskedForCity(history = []) {
+  const lastAssistant = [...safeHistory(history)].reverse().find(item => item.role === "assistant");
+  return Boolean(lastAssistant && /для какого города|в каком городе/i.test(lastAssistant.text));
+}
+
+function buildSearchQuery(text, history = [], geoCity = "") {
   const current = String(text || "").trim();
+  if (wasAskedForCity(history)) {
+    const city = String(geoCity || current).trim();
+    return normalizeSearchIdentifiers("погода сейчас в " + city);
+  }
   const priorUser = [...safeHistory(history)].reverse()
     .find(item => item.role === "user" && item.text.trim().length >= 3 && !isFollowUp(item.text));
   if (!isFollowUp(current) || !priorUser) return normalizeSearchIdentifiers(current);
@@ -115,11 +124,12 @@ function isSearchIntent(text, history = []) {
   const current = String(text || "").trim();
   if (!current) return false;
   if (/^(?:как так|почему так|а почему|почему|в смысле|что значит|и что|серьёзно|серьезно|правда что|это как)\??[!. ]*$/i.test(current) && safeHistory(history).some(item => item.role === "assistant")) return false;
+  if (wasAskedForCity(history) && current.length <= 40) return true;
   if (/^(?:какая сегодня дата|какое сегодня число|сегодняшняя дата)\??$/i.test(current)) return false;
 
   // Ordinary conversation and non-factual tasks do not need search.
   // Do not use \b after Russian words: JavaScript word boundaries are ASCII-oriented.
-  if (/^(?:привет|здравствуй|здарова|доброе утро|добрый день|добрый вечер|спасибо|благодарю|пока|до свидания|как дела|ты как)(?=$|[!.? ]+$)/i.test(current)) return false;
+  if (/^(?:привет|здравствуй|здарова|доброе утро|добрый день|добрый вечер|спасибо|благодарю|пока|до свидания|как дела(?: у тебя)?|ты как|как ты|кто ты|что ты такое)(?=$|[!.? ]+$)/i.test(current)) return false;
   if (/^(?:мне скучно|я устал|я устала|я рад|я рада|я не понимаю|мне нравится|я думаю|просто болтаю)(?=$|[!.? ]|\s)/i.test(current)) return false;
   if (/^(?:придумай|сочини|напиши|расскажи)\s+(?:мне\s+)?(?:сказк|стих|истори|шутк|анекдот|песн)/i.test(current)) return false;
   if (/^(?:переведи|перефразируй|исправь грамматику|сократи|суммируй)\s/i.test(current)) return false;
@@ -323,7 +333,7 @@ export default async function handler(req, res) {
 
   try {
     const shouldSearch = isSearchIntent(text, oldHistory);
-    const searchQuery = buildSearchQuery(text, oldHistory);
+    const searchQuery = buildSearchQuery(text, oldHistory, geoCity);
     let searchContext = "";
     if (shouldSearch) {
       searchContext = await searchWeb(searchQuery, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2900)));
