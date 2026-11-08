@@ -13,6 +13,17 @@ test("recognizes Raspberry Pi's known official domain", () => {
   assert.equal(result.kind, "official_candidate");
 });
 
+test("recognizes JieLi's published official website domain", () => {
+  const result = assessSource("https://www.zh-jieli.com/", "JieLi AC7076A SDK");
+  assert.equal(result.kind, "official_candidate");
+});
+
+test("recognizes the GitHub organization verified against JieLi's official domain", () => {
+  const result = assessSource("https://github.com/Jieli-Tech/fw-AC63_BT_SDK", "JieLi AC7076A SDK");
+  assert.equal(result.kind, "github_verified_org");
+  assert.match(result.label, /конкретного репозитория/);
+});
+
 test("does not treat GitHub as official merely because it hosts a repository", () => {
   const result = assessSource("https://github.com/raspberrypi/pico-sdk", "Raspberry Pi 5 SDK");
   assert.equal(result.kind, "github_brand_match");
