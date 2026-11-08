@@ -303,10 +303,25 @@ async function askGroq(text, history, searchContext, searchWasAttempted, timeout
 
   if (!response.ok) {
     const status = Number(response.status);
-    console.error("Groq request failed with HTTP", status);
+    const apiError = data?.error || {};
+    // Keep the provider's diagnostic details in Vercel logs, but never log
+    // request headers, API keys, or the full prompt.
+    console.error("Groq API error:", JSON.stringify({
+      status,
+      type: apiError.type || null,
+      code: apiError.code || null,
+      param: apiError.param || null,
+      message: String(apiError.message || "").slice(0, 500)
+    }));
     if (status === 401 || status === 403) throw new Error("GROQ_KEY_REJECTED");
     if (status === 429) throw new Error("GROQ_QUOTA");
-    if (status === 400) throw new Error("GROQ_MODEL_OR_REQUEST_ERROR");
+    if (status === 400) {
+      const detail = String(apiError.message || "").toLowerCase();
+      if (/model|model_id|model id|not found|does not exist/.test(detail)) {
+        throw new Error("GROQ_MODEL_REJECTED");
+      }
+      throw new Error("GROQ_REQUEST_REJECTED");
+    }
     throw new Error("GROQ_REQUEST_FAILED");
   }
 
@@ -326,8 +341,10 @@ function errorForUser(error) {
       return "Не удалось подключиться к Groq. Проверьте API-ключ в настройках Vercel.";
     case "GROQ_QUOTA":
       return "Сейчас превышен лимит запросов к Groq. Попробуйте немного позже.";
-    case "GROQ_MODEL_OR_REQUEST_ERROR":
-      return "Groq отклонил запрос. Проверьте название модели в настройках Vercel.";
+    case "GROQ_MODEL_REJECTED":
+      return "Groq не распознал выбранную модель. Проверьте значение GROQ_MODEL в настройках Vercel.";
+    case "GROQ_REQUEST_REJECTED":
+      return "Groq отклонил формат запроса. Ошибка записана в журнал сервера.";
     case "TIME_BUDGET_EXHAUSTED":
     case "AbortError":
       return "Не успела подготовить ответ. Попробуйте задать вопрос ещё раз, чуть короче.";
