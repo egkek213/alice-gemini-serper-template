@@ -88,6 +88,57 @@ function isTimeQuestion(text) {
   return /(?:сколько\s+(?:сейчас\s+)?врем(?:я|ени)|сколько\s+времени|который\s+час|текущее\s+время|время\s+сейчас|время\s+сколько|час\s+сейчас)/i.test(current);
 }
 
+function getCurrentDateParts(timeZone = "UTC") {
+  let zone = String(timeZone || "UTC");
+  try {
+    new Intl.DateTimeFormat("ru-RU", { timeZone: zone }).format(new Date());
+  } catch {
+    zone = "UTC";
+  }
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: zone,
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return {
+    timeZone: zone,
+    day: values.day,
+    month: values.month,
+    year: Number(values.year)
+  };
+}
+
+function getDeterministicDateAnswer(text, history = [], timeZone = "UTC") {
+  const current = String(text || "").toLowerCase().replace(/ё/g, "е").trim();
+  const date = getCurrentDateParts(timeZone);
+
+  const ageMatch = current.match(/если\\s+бы\\s+ты\\s+родил(?:ся|ась)\\s+(\\d{1,3})\\s+лет?\\s+назад[\\s\\S]*?сколько\\s+лет?\\s+(?:тебе|бы\\s+тебе)\\s+сейчас/i);
+  if (ageMatch) return "Мне было бы " + Number(ageMatch[1]) + " лет.";
+
+  const yearAgoMatch = current.match(/(\\d{1,3})\\s+лет?\\s+назад/i);
+  if (yearAgoMatch && /год/i.test(current)) {
+    return "Это был " + (date.year - Number(yearAgoMatch[1])) + " год.";
+  }
+
+  if (/^(?:а\\s+)?(?:какой\\s+)?(?:сейчас\\s+)?год(?:\\s+сейчас)?[?!., ]*$/i.test(current)
+    || /^(?:а\\s+)?сейчас\\s+какой(?:\\s+год)?[?!., ]*$/i.test(current)) {
+    const previousYearQuestion = [...safeHistory(history)].reverse().find(item =>
+      item.role === "user" && /год/i.test(item.text) && /\\d+\\s+лет?\\s+назад/i.test(item.text)
+    );
+    if (previousYearQuestion || /год/i.test(current)) return "Сейчас " + date.year + " год.";
+  }
+
+  if (/^(?:а\\s+)?(?:какая\\s+)?(?:сегодня\\s+)?(?:дата|число)(?:\\s+сейчас)?[?!., ]*$/i.test(current)
+    || /^(?:а\\s+)?дата\\s+сейчас\\s+какая[?!., ]*$/i.test(current)
+    || /^(?:какая\\s+)?сегодняшняя\\s+дата[?!., ]*$/i.test(current)) {
+    return "Сегодня " + date.day + " " + date.month + " " + date.year + " года.";
+  }
+
+  return null;
+}
+
 function hasTimeTopic(history = []) {
   return [...safeHistory(history)].reverse().some(item =>
     item.role === "user" && isTimeQuestion(item.text)
@@ -403,6 +454,20 @@ export default async function handler(req, res) {
       { role: "assistant", text: answer }
     ].slice(-MAX_HISTORY_MESSAGES);
     return res.status(200).json(aliceResponse(answer, false, history, conversationStart));
+  }
+
+  const deterministicDateAnswer = getDeterministicDateAnswer(
+    text,
+    oldHistory,
+    body?.meta?.timezone || "UTC"
+  );
+  if (deterministicDateAnswer) {
+    const history = [
+      ...oldHistory,
+      { role: "user", text: text.slice(0, MAX_HISTORY_MESSAGE_CHARS) },
+      { role: "assistant", text: deterministicDateAnswer }
+    ].slice(-MAX_HISTORY_MESSAGES);
+    return res.status(200).json(aliceResponse(deterministicDateAnswer, false, history, conversationStart));
   }
 
   const geoCity = body?.request?.nlu?.entities
