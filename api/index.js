@@ -264,7 +264,7 @@ async function askGroq(text, history, searchContext, searchWasAttempted, timeout
   if (!/^[A-Za-z0-9._/-]+$/.test(model)) throw new Error("INVALID_MODEL_NAME");
 
   const messages = [
-    { role: "developer", content: SYSTEM_PROMPT },
+    { role: "system", content: SYSTEM_PROMPT },
     ...safeHistory(history).map(item => ({
       role: item.role,
       content: item.text
