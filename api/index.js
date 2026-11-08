@@ -156,18 +156,29 @@ async function searchWeb(query, timeoutMs) {
       return "";
     }
 
-    const items = (Array.isArray(data.organic) ? data.organic : [])
-      .slice(0, 5)
-      .map((item, i) => {
-        const title = String(item.title || "").slice(0, 180);
-        const snippet = String(item.snippet || "").slice(0, 350);
-        const link = String(item.link || "").slice(0, 240);
-        return (i + 1) + ". " + title + ": " + snippet + " " + link;
-      });
+    const seenDomains = new Set();
+    const items = [];
+    for (const item of (Array.isArray(data.organic) ? data.organic : [])) {
+      const link = String(item.link || "").slice(0, 240);
+      let domain = "";
+      try {
+        domain = new URL(link).hostname.toLowerCase().replace(/^www\\./, "");
+      } catch {
+        continue;
+      }
+      if (!domain || seenDomains.has(domain)) continue;
+      seenDomains.add(domain);
+      const title = String(item.title || "").slice(0, 180);
+      const snippet = String(item.snippet || "").slice(0, 350);
+      items.push(items.length + 1 + ". " + title + ": " + snippet + " " + link);
+      if (items.length >= 5) break;
+    }
 
+    // Require at least two distinct source domains before treating search as evidence.
+    if (items.length < 2) return "";
     const answerBox = data.answerBox?.answer || data.answerBox?.snippet;
-    if (answerBox) items.unshift("Краткий ответ поисковика: " + String(answerBox).slice(0, 350));
-    return items.length ? items.join("\n") : "";
+    if (answerBox) items.unshift("Сводка поисковика (только дополнительная подсказка, не самостоятельное подтверждение): " + String(answerBox).slice(0, 350));
+    return items.join("\n");
   } catch (error) {
     console.warn("Serper request did not finish in time; continuing without search.");
     return "";
