@@ -114,7 +114,7 @@ function getDeterministicDateAnswer(text, history = [], timeZone = "UTC") {
   const current = String(text || "").toLowerCase().replace(/ё/g, "е").trim();
   const date = getCurrentDateParts(timeZone);
 
-  const ageMatch = current.match(/если\\s+бы\\s+ты\\s+родил(?:ся|ась)\\s+(\\d{1,3})\\s+лет?\\s+назад[\\s\\S]*?сколько\\s+лет?\\s+(?:тебе|бы\\s+тебе)\\s+сейчас/i);
+  const ageMatch = current.match(/если\\s+бы\\s+ты\\s+родил(?:ся|ась)\\s+(\\d{1,3})\\s+лет?\\s+назад[\\s\\S]*?(?:сколько\\s+бы\\s+тебе\\s+сейчас\\s+было|сколько\\s+лет?\\s+тебе\\s+сейчас)/i);
   if (ageMatch) return "Мне было бы " + Number(ageMatch[1]) + " лет.";
 
   const yearAgoMatch = current.match(/(\\d{1,3})\\s+лет?\\s+назад/i);
