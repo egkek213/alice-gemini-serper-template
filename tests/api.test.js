@@ -30,6 +30,12 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Я устал"), false);
 });
 
+test("search query normalizes spaced and hyphenated AC7076A identifiers", () => {
+  assert.match(buildSearchQuery("расскажи про AC 7076 A"), /AC7076A/);
+  assert.match(buildSearchQuery("расскажи про AC-7076-A"), /AC7076A/);
+  assert.match(buildSearchQuery("расскажи про AC7076A"), /AC7076A/);
+});
+
 test("follow-up month questions inherit the previous topic for search", () => {
   const history = [
     { role: "user", text: "список фильмов marvel за август 2026" },
