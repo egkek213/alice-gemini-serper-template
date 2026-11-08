@@ -84,7 +84,8 @@ function normalizeSearchIdentifiers(query) {
 }
 
 function isTimeQuestion(text) {
-  return /(?:сколько\s+(?:сейчас\s+)?времени?|который\s+час|текущее\s+время|время\s+сейчас)/i.test(String(text || ""));
+  const current = String(text || "").toLowerCase().replace(/ё/g, "е").trim();
+  return /(?:сколько\s+(?:сейчас\s+)?врем(?:я|ени)|сколько\s+времени|который\s+час|текущее\s+время|время\s+сейчас|время\s+сколько|час\s+сейчас)/i.test(current);
 }
 
 function hasTimeTopic(history = []) {
