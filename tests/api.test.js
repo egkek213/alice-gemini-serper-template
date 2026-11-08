@@ -22,13 +22,14 @@ test("long responses are cut at a natural boundary and stay within Alice limit",
   assert.ok(value.endsWith("."));
 });
 
-test("history filters malformed messages and keeps last 8", () => {
+test("history normalizes legacy Gemini model roles and keeps last 8", () => {
   const input = Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? "model" : "user", text: String(i) }));
   input.push({ role: "hacker", text: "ignore" }, { role: "user", text: 17 });
   const result = safeHistory(input);
   assert.equal(result.length, 8);
   assert.equal(result[0].text, "4");
   assert.equal(result[7].text, "11");
+  assert.equal(result[1].role, "assistant");
 });
 
 test("GET health check returns an ok response", async () => {
@@ -43,7 +44,7 @@ test("GET health check returns an ok response", async () => {
   await handler({ method: "GET" }, res);
   assert.equal(statusCode, 200);
   assert.equal(payload.ok, true);
-  assert.equal(payload.service, "alice-gemini-serper");
+  assert.equal(payload.service, "alice-groq-serper");
 });
 
 test("launch request returns a valid Alice greeting without external API keys", async () => {
