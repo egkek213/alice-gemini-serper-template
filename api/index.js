@@ -68,11 +68,19 @@ function isFollowUp(text) {
   return /^(?:а\s+)?(?:в|за|на|а\s+что|а\s+как|а\s+если|а\s+когда)(?:\s|$)/i.test(text.trim());
 }
 
+function normalizeSearchIdentifiers(query) {
+  // Search engines may treat spaced and hyphenated chip/model numbers differently.
+  // Include the canonical compact form alongside the user's original wording.
+  return String(query || "").replace(/\\bAC[\\s-]*7076[\\s-]*A\\b/gi, match =>
+    match + " AC7076A \\"AC 7076 A\\""
+  );
+}
+
 function buildSearchQuery(text, history = []) {
   const current = String(text || "").trim();
   const priorUser = [...safeHistory(history)].reverse()
     .find(item => item.role === "user" && item.text.trim().length >= 12 && !isFollowUp(item.text));
-  if (!isFollowUp(current) || !priorUser) return current;
+  if (!isFollowUp(current) || !priorUser) return normalizeSearchIdentifiers(current);
 
   const prior = priorUser.text;
   const monthMatch = current.match(new RegExp(MONTHS, "i"));
@@ -99,7 +107,7 @@ function buildSearchQuery(text, history = []) {
       .trim();
     return [topic, monthName, year].filter(Boolean).join(" ");
   }
-  return prior + " " + current;
+  return normalizeSearchIdentifiers(prior + " " + current);
 }
 
 function isSearchIntent(text, history = []) {
