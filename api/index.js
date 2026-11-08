@@ -109,6 +109,7 @@ function isSearchIntent(text, history = []) {
   if (/^(?:придумай|сочини|напиши|расскажи)\s+(?:мне\s+)?(?:сказк|стих|истори|шутк|анекдот|песн)/i.test(current)) return false;
   if (/^(?:переведи|перефразируй|исправь грамматику|сократи|суммируй)\b/i.test(current)) return false;
   if (/^(?:сколько будет|чему равно)\s+[\d\s()+*/.,-]+\??$/i.test(current)) return false;
+  if (/^сколько будет\s+\d+\s+(?:умножить|плюс|минус|разделить)\s+на?\s+\d+\??$/i.test(current)) return false;
 
   const query = buildSearchQuery(current, history);
   const freshnessOrKnownTopic = /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]|характеристик|биограф|истори[яи]|состав|производител|стоимость|цена|населени|столица|площадь|расстояни|закон|правил[ао]|событи/i.test(query);
