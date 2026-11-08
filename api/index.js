@@ -90,9 +90,13 @@ function normalizeSearchIdentifiers(query) {
 const BRAND_DOMAIN_ALIASES = [
   { keys: ["windows", "windows11", "windows13"], domains: ["microsoft.com"] },
   { keys: ["raspberry", "raspberrypi"], domains: ["raspberrypi.com", "raspberrypi.org"] },
-  { keys: ["jieli"], domains: ["jieli.com"] },
+  { keys: ["jieli"], domains: ["zh-jieli.com"] },
   { keys: ["android"], domains: ["android.com", "source.android.com"] },
   { keys: ["iphone", "ios", "macos"], domains: ["apple.com"] }
+];
+
+const VERIFIED_GITHUB_ORGS = [
+  { owner: "jieli-tech", keys: ["jieli"], verifiedDomains: ["zh-jieli.com"] }
 ];
 
 const SOURCE_QUERY_STOP_WORDS = new Set([
@@ -149,11 +153,16 @@ function assessSource(url, query) {
   if (host === "github.com") {
     const owner = (parsed.pathname.split("/")[1] || "").toLowerCase();
     const ownerMatchesEntity = entityKeys.some(key => owner === key || owner.startsWith(key));
+    const verifiedOrg = VERIFIED_GITHUB_ORGS.find(entry =>
+      entry.owner === owner && entry.keys.some(key => entityKeys.includes(key))
+    );
     return {
-      kind: ownerMatchesEntity ? "github_brand_match" : "github_unverified",
-      label: ownerMatchesEntity
-        ? "GitHub-репозиторий владельца, совпадающего с названием сущности; официальность нужно подтвердить"
-        : "GitHub-репозиторий; связь владельца с производителем не установлена",
+      kind: verifiedOrg ? "github_verified_org" : ownerMatchesEntity ? "github_brand_match" : "github_unverified",
+      label: verifiedOrg
+        ? "GitHub-организация подтверждает контроль домена " + verifiedOrg.verifiedDomains.join(", ") + "; принадлежность конкретного репозитория нужному SDK всё равно нужно проверить"
+        : ownerMatchesEntity
+          ? "GitHub-репозиторий владельца, совпадающего с названием сущности; официальность нужно подтвердить"
+          : "GitHub-репозиторий; связь владельца с производителем не установлена",
       domain: host
     };
   }
