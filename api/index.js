@@ -2,17 +2,21 @@ const DEFAULT_MODEL = "openai/gpt-oss-20b";
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_MESSAGE_CHARS = 1200;
 const MAX_ALICE_TEXT = 1024;
-const TOTAL_RESPONSE_BUDGET_MS = 3600;
-const SERPER_TIMEOUT_MS = 600;
+const TOTAL_RESPONSE_BUDGET_MS = 4300;
+const SERPER_TIMEOUT_MS = 1000;
 const GROQ_TIMEOUT_MS = 2500;
 
 const SYSTEM_PROMPT = [
   "Ты — полезный голосовой помощник в навыке Яндекс Алисы.",
   "Отвечай естественно, по-русски, кратко и так, чтобы ответ было удобно слушать.",
   "Обычно используй 1–3 коротких предложения. Не используй Markdown, таблицы, списки с символами или длинные вступления.",
-  "Если вопрос требует актуальных данных и переданы результаты поиска, опирайся на них; не выдумывай отсутствующие факты.",
+  "Не выдумывай факты, названия, даты, цены, расписания и даты релизов.",
+  "Для вопросов о текущих событиях, будущих и недавних релизах, расписаниях и других изменяемых фактах используй результаты веб-поиска.",
+  "Если результатов поиска нет или они не подтверждают факт, прямо скажи, что не удалось проверить информацию. Не заполняй пробелы догадками.",
   "Если не знаешь ответа, честно скажи об этом."
 ].join(" ");
+
+const MONTHS = "(январ[еь]|феврал[еь]|март[еа]?|апрел[еь]|ма[йяе]|июн[еья]|июл[еья]|август[еа]?|сентябр[еь]|октябр[еь]|ноябр[еь]|декабр[еь])";
 
 function aliceResponse(text, endSession = false, history = []) {
   return {
@@ -27,8 +31,8 @@ function aliceResponse(text, endSession = false, history = []) {
 
 function fitAliceText(value) {
   const text = String(value ?? "")
-    .replace(/[\r\n\t]+/g, " ")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[\\r\\n\\t]+/g, " ")
+    .replace(/\\s{2,}/g, " ")
     .trim();
 
   if (text.length <= MAX_ALICE_TEXT) return text || "Не удалось подготовить ответ.";
@@ -45,10 +49,6 @@ function fitAliceText(value) {
   return (lastSpace > 200 ? candidate.slice(0, lastSpace) : candidate).trim() + "…";
 }
 
-function isSearchIntent(text) {
-  return /\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up)\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные/i.test(text);
-}
-
 function safeHistory(history) {
   if (!Array.isArray(history)) return [];
   return history
@@ -58,6 +58,30 @@ function safeHistory(history) {
       role: item.role === "user" ? "user" : "assistant",
       text: item.text.slice(0, MAX_HISTORY_MESSAGE_CHARS)
     }));
+}
+
+function isFollowUp(text) {
+  return /^(а\\s+)?(в|за|на|а\\s+что|а\\s+как|а\\s+если|а\\s+когда)\\b/i.test(text.trim());
+}
+
+function buildSearchQuery(text, history = []) {
+  const current = String(text || "").trim();
+  const priorUser = [...safeHistory(history)].reverse()
+    .find(item => item.role === "user" && item.text.trim().length >= 12 && !isFollowUp(item.text));
+  if (!isFollowUp(current) || !priorUser) return current;
+
+  const prior = priorUser.text;
+  const monthMatch = current.match(new RegExp(MONTHS, "i"));
+  if (monthMatch && new RegExp(MONTHS, "i").test(prior)) {
+    return prior.replace(new RegExp(MONTHS, "i"), monthMatch[0]) + " " + (current.match(/\\b20\\d{2}\\b/)?.[0] || "");
+  }
+  return prior + " " + current;
+}
+
+function isSearchIntent(text, history = []) {
+  const query = buildSearchQuery(text, history);
+  return /\\b(latest|today|current|news|weather|price|exchange rate|recent|search|look up|release date|release schedule)\\b|сегодня|сейчас|последн|новост|погод|курс валют|найди|поищи|актуальн|сколько стоит|свежие данные|фильм|кино|marvel|человек.?паук|релиз|дата выхода|вышел|выйдет|расписани|игр[аы]|обновлени|верси[яию]/i.test(query)
+    || /\\b20\\d{2}\\b/.test(query) && new RegExp(MONTHS, "i").test(query);
 }
 
 async function fetchJson(url, options, timeoutMs) {
@@ -85,7 +109,7 @@ async function searchWeb(query, timeoutMs) {
           "X-API-KEY": key,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ q: query, gl: "ru", hl: "ru", num: 3 })
+        body: JSON.stringify({ q: query, gl: "ru", hl: "ru", num: 5 })
       },
       Math.min(SERPER_TIMEOUT_MS, timeoutMs)
     );
@@ -96,7 +120,7 @@ async function searchWeb(query, timeoutMs) {
     }
 
     const items = (Array.isArray(data.organic) ? data.organic : [])
-      .slice(0, 3)
+      .slice(0, 5)
       .map((item, i) => {
         const title = String(item.title || "").slice(0, 180);
         const snippet = String(item.snippet || "").slice(0, 350);
@@ -106,14 +130,14 @@ async function searchWeb(query, timeoutMs) {
 
     const answerBox = data.answerBox?.answer || data.answerBox?.snippet;
     if (answerBox) items.unshift("Краткий ответ поисковика: " + String(answerBox).slice(0, 350));
-    return items.length ? items.join("\n") : "";
+    return items.length ? items.join("\\n") : "";
   } catch (error) {
     console.warn("Serper request did not finish in time; continuing without search.");
     return "";
   }
 }
 
-async function askGroq(text, history, searchContext, timeoutMs) {
+async function askGroq(text, history, searchContext, searchWasAttempted, timeoutMs) {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error("MISSING_GROQ_KEY");
   if (timeoutMs < 250) throw new Error("TIME_BUDGET_EXHAUSTED");
@@ -129,9 +153,13 @@ async function askGroq(text, history, searchContext, timeoutMs) {
     }))
   ];
 
-  const prompt = searchContext
-    ? text + "\n\nРезультаты поиска в интернете:\n" + searchContext + "\nИспользуй их только там, где они относятся к вопросу."
-    : text;
+  let prompt = text;
+  if (searchContext) {
+    prompt += "\\n\\nРезультаты веб-поиска по теме запроса (источник может содержать ошибки, сверяй формулировки и даты):\\n" + searchContext
+      + "\\nОтвечай только фактами, которые подтверждаются этими результатами. Если подтверждения нет, скажи об этом.";
+  } else if (searchWasAttempted) {
+    prompt += "\\n\\nВеб-поиск не вернул проверяемых результатов. Не отвечай на фактическую часть по памяти и не придумывай названия или даты. Скажи, что сейчас не удалось проверить информацию.";
+  }
   messages.push({ role: "user", content: prompt });
 
   const { response, data } = await fetchJson(
@@ -145,7 +173,7 @@ async function askGroq(text, history, searchContext, timeoutMs) {
       body: JSON.stringify({
         model,
         messages,
-        temperature: 0.5,
+        temperature: 0.2,
         max_completion_tokens: 320,
         reasoning_effort: "low",
         include_reasoning: false,
@@ -219,15 +247,18 @@ export default async function handler(req, res) {
   }
 
   try {
+    const shouldSearch = isSearchIntent(text, oldHistory) && Boolean(process.env.SERPER_API_KEY);
+    const searchQuery = buildSearchQuery(text, oldHistory);
     let searchContext = "";
-    if (isSearchIntent(text) && process.env.SERPER_API_KEY) {
-      searchContext = await searchWeb(text, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2600)));
+    if (shouldSearch) {
+      searchContext = await searchWeb(searchQuery, Math.min(SERPER_TIMEOUT_MS, Math.max(0, remainingMs() - 2900)));
     }
 
     const answer = await askGroq(
       text,
       oldHistory,
       searchContext,
+      shouldSearch,
       Math.max(0, Math.min(GROQ_TIMEOUT_MS, remainingMs() - 600))
     );
 
@@ -245,4 +276,4 @@ export default async function handler(req, res) {
   }
 }
 
-export { aliceResponse, fitAliceText, isSearchIntent, safeHistory };
+export { aliceResponse, buildSearchQuery, fitAliceText, isSearchIntent, safeHistory };
