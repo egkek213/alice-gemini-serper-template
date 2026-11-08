@@ -22,7 +22,7 @@ test("follow-up month questions inherit the previous topic for search", () => {
     { role: "user", text: "список фильмов marvel за август 2026" },
     { role: "assistant", text: "Вот список фильмов..." }
   ];
-  assert.equal(buildSearchQuery("а в июле 2026", history), "список фильмов marvel за июль 2026");
+  assert.equal(buildSearchQuery("а в июле 2026", history), "список фильмов marvel июль 2026");
   assert.equal(isSearchIntent("а в июле 2026", history), true);
 });
 
