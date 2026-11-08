@@ -16,6 +16,12 @@ test("search intent detects Russian and English freshness requests", () => {
   assert.equal(isSearchIntent("Расскажи сказку"), false);
   assert.equal(isSearchIntent("какая сегодня дата"), false);
   assert.equal(isSearchIntent("Список фильмов Marvel за август 2026"), true);
+  assert.equal(isSearchIntent("Кто придумал Bluetooth?"), true);
+  assert.equal(isSearchIntent("Какой процессор стоит в AC7076A?"), true);
+  assert.equal(isSearchIntent("Почему небо голубое?"), true);
+  assert.equal(isSearchIntent("Расскажи сказку про дракона"), false);
+  assert.equal(isSearchIntent("Как дела?"), false);
+  assert.equal(isSearchIntent("Сколько будет 17 умножить на 3?"), true);
 });
 
 test("follow-up month questions inherit the previous topic for search", () => {
